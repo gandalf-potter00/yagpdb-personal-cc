@@ -1,0 +1,91 @@
+{{/*
+    Replaces the kick command to allow for many additional features (embed response, silent responses, including moderator, creation of modstats, etc.)
+    Command usage: -kick <user:ID/Mention> <reason:text>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $customResponse := true }} {{/* Whether or not to use the old response system or the custom one */}}
+{{ $embedColor := 15115325 }} {{/* Color of the embed in the custom response */}}
+{{ $deleteTrigger := false }} {{/* Whether or not the command trigger should be deleted upon use */}}
+{{ $silentResponse := false }} {{/* Whether or not the response should be silent, custom or not */}}
+{{ $includeReason := true }} {{/* Whether or not the reason for the moderation should be included in the custom response*/}}
+{{ $includeModerator := false }} {{/* Whether or not to include the moderator who initiated the moderation in the custom response*/}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ $emoji := "👢" }} {{/* Emoji to be used for the response later */}}
+{{ if .ExecData }} {{/* If the modstats expired after 7 days or 30 days */}}
+	{{ $depth := .ExecData.depth }}
+	{{ if $depth }} {{/* If 7 days */}}
+        {{ $userID := .ExecData.userID }}
+        {{ $x := dbGet $userID "modStats" }}
+        {{ $x.Value.Set "k7" (sub ($x.Value.Get "k7") 1) }} {{/* Subtracts 1 from the 7 day moderation */}}
+        {{ dbSet $userID "modStats" $x.Value }} {{/* Saves the new value to the database */}}
+        {{ execCC .CCID nil (toInt (toDuration "23d").Seconds) (sdict "userID" $userID) }} {{/* Sets the command to run again after 23 days (7+23=30) */}}
+	{{ else }} {{/* If 30 days */}}
+        {{ $userID := .ExecData.userID }}
+        {{ $x := dbGet $userID "modStats" }}
+        {{ $x.Value.Set "k30" (sub ($x.Value.Get "k30") 1) }} {{/* Subtracts 1 from the 30 day moderation */}}
+        {{ dbSet $userID "modStats" $x.Value }} {{/* Saves the new value to the database */}}
+	{{ end }}
+{{ else }} {{/* If kick */}}
+	{{ $args := parseArgs 2 (print "`" .ServerPrefix "kick <user:ID/Mention> <reason>`")
+            (carg "member" "Member")
+            (carg "string" "Reason") }}
+    {{ $target := $args.Get 0 }}
+    {{ $reason := $args.Get 1 }}
+	{{ $uRolePos :=  -1 }}{{ $tRolePos := -1 }}
+	{{ range .Guild.Roles }}
+		{{ if and (in $.Member.Roles .ID) (gt .Position $uRolePos) }}{{ $uRolePos = .Position }}{{ end }}
+		{{ if and (in $target.Roles .ID) (gt .Position $tRolePos) }}{{ $tRolePos = .Position }}{{ end }}
+	{{ end }}
+
+	{{ if gt $uRolePos $tRolePos }}
+        {{ try }} {{/* Tries to kick the target user */}}
+            {{ $kick := exec "kick" $target.User.ID $reason }}
+			{{ if not $silentResponse}}
+                {{ if $customResponse }}
+                    {{ $footer := "" }}
+                    {{ if $includeReason }}
+                        {{ $reason = joinStr "" "\n> **Reason: **" $reason "\n" }}
+                    {{ else }}
+                        {{ $reason = "" }}
+                    {{ end }}
+                    {{ if $includeModerator }}
+                        {{ $footer = sdict "text" (printf "%s (ID %d)" .User.Username .User.ID) "icon_url" (.User.AvatarURL "256") }}
+                    {{ end }}
+                    {{ $embed := sendMessage nil (cembed
+                            "description" (printf "%s **Kicked** <@%d>%s" $emoji $target.User.ID $reason)
+                            "color" $embedColor
+                            "footer" (or $footer (sdict "text" ""))
+                            "timestamp" currentTime )
+                    }}
+                {{ else }}
+                    {{ $kick }}
+                {{ end }}
+            {{ end }}
+
+            {{ $x := dbGet .User.ID "modStats" }}
+            {{ if $x }} {{/* If the user already has modstats set, add 1 to the appropriate values */}}
+                {{ $x.Value.Set "k" (add ($x.Value.Get "k") 1) }}
+                {{ $x.Value.Set "k7" (add ($x.Value.Get "k7") 1) }}
+                {{ $x.Value.Set "k30" (add ($x.Value.Get "k30") 1) }}
+                {{ dbSet .User.ID "modStats" $x.Value }}
+            {{ else }} {{/* If the user doesn't have modstats set, set them up while also adding 1 to the appropriate values */}}
+                {{ $modStats := sdict "w" 0 "w7" 0 "w30" 0 "t" 0 "t7" 0 "t30" 0 "k" 1 "k7" 1 "k30" 1 "b" 0 "b7" 0 "b30" 0 }}
+                {{ dbSet .User.ID "modStats" $modStats }}
+            {{ end }}
+            {{ execCC .CCID nil (toInt (toDuration "7d").Seconds) (sdict "userID" .User.ID "depth" 1) }} {{/* Send the command 7 days later to subtract 1 from 7 days */}}
+        {{ catch }} {{/* If error */}}
+			{{ .Error }}
+        {{ end }}
+	{{ else }}
+		{{ print "Error: Can't use moderation commands on users ranked the same or higher than you" }}
+	{{ end }}
+	{{ if $deleteTrigger }}
+		{{ deleteTrigger 0 }}
+	{{ end }}
+{{ end }}
