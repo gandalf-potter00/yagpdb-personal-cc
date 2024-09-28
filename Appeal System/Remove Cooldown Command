@@ -1,0 +1,35 @@
+{{/*
+    Removes a cooldown from a user (both database entry and role). Creates a log of the event
+    Command usage: -removecooldown <user:ID/Mention>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $roleID := 1233161190499156061 }} {{/* Cooldown role to be applied */}}
+{{ $logChannel := 1243805072668884993 }} {{/* Channel to send log embed */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ $args := parseArgs 1 (print "`" .ServerPrefix "removecooldown <user:ID/Mention>`")
+	(carg "member" "User") }}
+{{ $user := ($args.Get 0).User }}
+{{ $cooldown := dbGet $user.ID "appealCooldown" }}
+{{ if $cooldown }} {{/* If the user is on appeal cooldown */}}
+	{{ takeRoleID $user.ID $roleID }}
+	{{ dbDel $user.ID "appealCooldown" }}
+	{{ printf "`%s` has successfully had their cooldown removed!" $user.Username }}
+	{{ $embed := cembed
+		"title" "Appeal Cooldown Removed"
+		"description" (printf ">>> **Member off cooldown:** <@%d> *ID (%d)*\n**Responsible Moderator:** <@%d>" $user.ID $user.ID .User.ID )
+		"color" 54998
+		"footer" (sdict
+			"text" (print .User.Username " (ID " .User.ID ")" )
+			"icon_url" (.User.AvatarURL "Moderator") )
+		"timestamp" currentTime
+	}}
+	{{ sendMessage $logChannel $embed }}
+{{ else }}
+	{{ printf "`%s` is not on appeal cooldown! Use `%scooldown` to put them on cooldown!" $user.Username .ServerPrefix }}
+{{ end }}
