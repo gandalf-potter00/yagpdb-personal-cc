@@ -1,0 +1,38 @@
+{{/*
+    Removes the appeal ban role and deletes the associated database entry. Creates a log of the event
+    Command usage: -appealunban <user:ID/Mention> <reason:text>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $roleID := 1233161190499156061 }} {{/* Appeal ban role to be removed */}}
+{{ $logChannel := 1243805072668884993 }} {{/* Channel to send log embed */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ $args := parseArgs 1 (print "`" .ServerPrefix "appealunban <user:ID/Mention>`")
+	(carg "member" "User")
+	(carg "string" "Reason") }}
+{{ $user := ($args.Get 0).User }}
+{{ $reason := $args.Get 1 }}
+{{ if $args.IsSet 0 }} {{/* If the argument was a valid member, proceed */}}
+	{{ if (dbGet $user.ID "appealBan") }} {{/* If the user is banned from appeals */}}
+		{{ dbDel $user.ID "appealBan" }} {{/* Deletes the database entry so that their role isn't persisted after leaving and rejoining */}}
+		{{ takeRoleID $user.ID $roleID }} {{/* Removes the role used for appeal bans */}}
+		{{ print $user.Mention " has successfully been unbanned from appeals! Use the `;appealban` command to reapply their ban." }}
+		{{ $embed := cembed
+			"title" "Appeal Ban Removed"
+			"description" (printf ">>> **Unbanned Member:** <@%d> *ID (%d)* \n **Reasponsible Moderator:** <@%d> \n**Reason:** %s" $user.ID $user.ID .User.ID (or $reason "(No reason specified)") )
+			"color" 6473311
+			"footer" (sdict
+				"text" (print .User.Username " (ID " .User.ID ")" )
+				 "icon_url" (.User.AvatarURL "Moderator") )
+			"timestamp" currentTime
+		}}
+		{{ sendMessage $logChannel $embed }} {{/* Sends a log of the ban to the channel given */}}
+	{{ else }}
+		{{ print $user.Mention " is not banned from appeals. Use the `" .ServerPrefix "appealban` command to ban them from appeals." }}
+	{{ end }}
+{{ end }}
