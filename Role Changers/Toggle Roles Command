@@ -1,0 +1,61 @@
+{{/*
+    The roles giver command and roles taker command merged into one.
+    Command usage: -toggleroles <user:ID/Mention>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $safeRoles := cslice }} {{/* Roles protected from this command */}}
+{{ $logChannel := 1243805072668884993 }} {{/* Channel to log the action */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ $args := parseArgs 1 (printf "`%stoggleroles <user:ID/Mention>`" .ServerPrefix)
+	(carg "member" "Target")}}
+{{ $member := $args.Get 0 }}
+
+{{ range $safeRoles }} {{/* Checks if the user is protected */}}
+	{{- if targetHasRoleID $member.User.ID . }}
+		{{- printf "`%s` is a moderator or admin and cannot have their roles revoked" $member.User.Username }}
+		{{- return }}
+	{{- end -}}
+{{ end }}
+
+{{ if $args.IsSet 0 }}
+	{{ $embed := "" }}
+	{{ if dbGet $member.User.ID "roles" }} {{/* If the command has already been used on the user without the reversal command being used */}}
+		{{ range (dbGet $member.User.ID "roles").Value }}
+			{{- giveRoleID $member.User.ID . }}
+		{{ end }}
+		{{ dbDel $member.User.ID "roles" }}
+		{{ printf "`%s` has regained their roles!" $member.User.Username}}
+		{{ $embed = cembed
+			"title" "Give Roles"
+			"description" (printf "> **Affected User:** <@%d> *(ID %d)*\n> **Responsible Moderator:** <@%d> *(ID %d)*)" $member.User.ID $member.User.ID .User.ID .User.ID)
+			"color" 2681656
+			"footer" (sdict
+				"text" (printf "%s (ID %d)" .User.Username .User.ID)
+				"icon_url" (.User.AvatarURL "256") )
+		}}
+	{{ else }}
+		{{ $roleList := "" }}
+		{{ range $member.Roles }}
+			{{- $roleList = joinStr "\n" (printf "<@&%d>" .) $roleList }}
+		{{ end }}
+		{{ dbSet $member.User.ID "roles" $member.Roles }} {{/* Sets a database value of the user's roles that were taken so that it can be reversed later */}}
+		{{ setRoles $member.User.ID cslice }} {{/* Sets the user's roles to none */}}
+		{{ printf "`%s` has had their roles removed!" $member.User.Username}}
+		{{ $embed = cembed
+			"title" "Remove Roles"
+			"description" (printf "> **Affected User:** <@%d> *(ID %d)*\n> **Responsible Moderator:** <@%d> *(ID %d)*\n**Roles Taken:**\n>>> %s" $member.User.ID $member.User.ID .User.ID .User.ID $roleList )
+			"color" 15411754
+			"footer" (sdict
+				"text" (printf "%s (ID %d)" .User.Username .User.ID )
+				"icon_url" (.User.AvatarURL "256") )
+			"timestamp" currentTime
+		}}
+	{{ end }}
+	{{ sendMessage $logChannel $embed }}
+{{ end }}
