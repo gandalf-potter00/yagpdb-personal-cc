@@ -1,0 +1,117 @@
+{{/*
+    Replaces the ban command to allow for many additional features (embed response, silent responses, including moderator, creation of modstats, etc.)
+    Command usage: -tempban <user:ID/Mention> <duration> <reason:text>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $customResponse := true }} {{/* Whether or not to use the old response system or the custom one */}}
+{{ $embedColor := 12997198 }} {{/* Color of the embed if custom response is 'true' */}}
+{{ $deleteTrigger := false }} {{/* Whether or not the command trigger should be deleted upon use */}}
+{{ $silentResponse := false }} {{/* Whether or not the response should be silent, custom or not */}}
+{{ $includeReason := true }} {{/* Whether or not the reason for the moderation should be included in the custom response*/}}
+{{ $includeModerator := false }} {{/* Whether or not to include the moderator who initiated the moderation in the custom response*/}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ $emoji := "🔨" }} {{/* Emoji to be used for the response later */}}
+{{ if .ExecData }} {{/* If the modstats expired after 7 days or 30 days */}}
+	{{ $depth := .ExecData.depth }}
+	{{ if $depth }} {{/* If 7 days */}}
+        {{ $userID := .ExecData.userID }}
+        {{ $x := dbGet $userID "modStats" }}
+        {{ $x.Value.Set "b7" (sub ($x.Value.Get "b7") 1) }} {{/* Subtracts 1 from the 7 day moderation */}}
+        {{ dbSet $userID "modStats" $x.Value }} {{/* Saves the new value to the database */}}
+        {{ execCC .CCID nil (toInt (toDuration "23d").Seconds) (sdict "userID" $userID) }} {{/* Sets the command to run again after 23 days (7+23=30) */}}
+	{{ else }} {{/* If 30 days */}}
+        {{ $userID := .ExecData.userID }}
+        {{ $x := dbGet $userID "modStats" }}
+        {{ $x.Value.Set "b30" (sub ($x.Value.Get "b30") 1) }} {{/* Subtracts 1 from the 30 day moderation */}}
+        {{ dbSet $userID "modStats" $x.Value }} {{/* Saves the new value to the database */}}
+	{{ end }}
+{{ else }} {{/* If tempban */}}
+	{{ if ge (len .CmdArgs) 3 }}
+		{{ $args := .CmdArgs }}
+		{{ $user := index $args 0 }}
+		{{ $duration := false }}
+		{{ if reFind `\d+[a-z]+` (index $args 1) }}
+			{{ $duration = toDuration (index $args 1) }}
+		{{ end }}
+		{{ $reason := joinStr " " (slice $args 2) }}
+		{{ $userID := toInt (reFind `[0-9]+` $user) }}
+		{{ $inServer := false }}
+		{{ $aboveRole := false }}
+		{{ if getMember $user }}
+			{{ $inServer = true }}
+			{{ $target := getMember $userID }}
+			{{ $uRolePos :=  -1 }}{{ $tRolePos := -1 }}
+			{{ range .Guild.Roles }}
+				{{ if and (in $.Member.Roles .ID) (gt .Position $uRolePos) }}{{ $uRolePos = .Position }}{{ end }}
+				{{ if and (in $target.Roles .ID) (gt .Position $tRolePos) }}{{ $tRolePos = .Position }}{{ end }}
+			{{ end }}
+			{{ if gt $uRolePos $tRolePos }}
+				{{ $aboveRole = true }}
+			{{ end }}
+		{{ end }}
+
+		{{ if and (or $aboveRole (not $inServer)) $duration }}
+        	{{ try }}
+				{{ if le (toInt $duration.Hours) 2557920 }}
+                	{{ $ban := exec "ban" $userID (toInt $duration.Minutes) $reason }}
+                	{{ if not $silentResponse}}
+                    	{{ if $customResponse }}
+                        	{{ $footer := "" }}
+                        	{{ if $includeReason }}
+                            	{{ $reason = joinStr "" "\n> **Reason: **" $reason "\n" }}
+                        	{{ else }}
+                            	{{ $reason = "" }}
+                        	{{ end }}
+                        	{{ if $includeModerator }}
+                            	{{ $footer = sdict "text" (printf "%s (ID %d)" .User.Username .User.ID) "icon_url" (.User.AvatarURL "256") }}
+                        	{{ end }}
+                        	{{ $embed := sendMessage nil (cembed
+                                "description" (printf "%s **Banned** <@%d>%s> **Duration:** %s" $emoji $userID $reason (humanizeDurationSeconds $duration) )
+                                "color" $embedColor
+                                "footer" (or $footer (sdict "text" ""))
+                                "timestamp" currentTime )
+                        	}}
+                    	{{ else }}
+                        	{{ $ban }}
+                    	{{ end }}
+                	{{ end }}
+
+                	{{ $x := dbGet .User.ID "modStats" }}
+                	{{ if $x }} {{/* If the user already has modstats set, add 1 to the appropriate values */}}
+                    	{{ $x.Value.Set "b" (add ($x.Value.Get "b") 1) }}
+                    	{{ $x.Value.Set "b7" (add ($x.Value.Get "b7") 1) }}
+                    	{{ $x.Value.Set "b30" (add ($x.Value.Get "b30") 1) }}
+                    	{{ dbSet .User.ID "modStats" $x.Value }}
+                	{{ else }} {{/* If the user doesn't have modstats set, set them up while also adding 1 to the appropriate values */}}
+                    	{{ $modStats := sdict "w" 0 "w7" 0 "w30" 0 "t" 0 "t7" 0 "t30" 0 "k" 0 "k7" 0 "k30" 0 "b" 1 "b7" 1 "b30" 1 }}
+                    	{{ dbSet .User.ID "modStats" $modStats }}
+                	{{ end }}
+                	{{ execCC .CCID nil (toInt (toDuration "7d").Seconds) (sdict "userID" .User.ID "depth" 1) }} {{/* Send the command 7 days later to subtract 1 from 7 days */}}
+				{{ else }}
+				{{ print "Error: Max duration of Bans can be 292 years" }}
+				{{ end }}
+        	{{ catch }} {{/* If error */}}
+				{{ if reFind "Unknown User" .Error }}
+					{{ print "Error: Invalid user" }}
+				{{ else }}
+					{{ .Error }}
+				{{ end }}
+        	{{ end }}
+		{{ else if not $duration }}
+			{{ print "Error: Invalid duration type. Example: 3mo = 3 months, 7d = 7 days" }}
+		{{ else }}
+			{{ print "Error: Can't use moderation commands on users ranked the same or higher than you" }}
+		{{ end }}
+	{{ else }}
+		{{ printf "Not enough arguments set.\n`%stempban <user:ID/Mention> <duration> <reason>`" .ServerPrefix }}
+	{{ end }}
+	{{ if $deleteTrigger }}
+		{{ deleteTrigger 0 }}
+	{{ end }}
+{{ end }}
