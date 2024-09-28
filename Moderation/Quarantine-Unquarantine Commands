@@ -1,0 +1,75 @@
+{{/*
+    Quarantine: Assigns a role to a user that removes their ability to see any channels (must be configured yourself). Creates a database entry to be used later (in the event a user leaves and rejoins). Additional code is necessary if you want to utilize the database entry (i.e. adding code to the join logs).
+    Unquarantine: Removes the role and deletes the database entry
+    Logs both events
+    Command usage: -quarantine <user:ID/Mention> <reason:text> | -unquarantine <user:ID/Mention> <reason:text>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $quarantineRole := 1233161246996693086 }}
+{{ $logChannel := 1243805072668884993 }}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{/* Checks which command is being used */}}
+{{ $syntax := "" }}
+{{ $type := "" }}
+{{ if eq .Cmd (printf "%squarantine" .ServerPrefix) }}
+	{{ $syntax = printf "`%squarantine <user:ID/Mention> <reason:text>`" .ServerPrefix }}
+	{{ $type = "quarantine" }}
+{{ else }}
+	{{ $syntax = printf "`%sunquarantine <user:ID/Mention> <reason:text>`" .ServerPrefix }}
+	{{ $type = "unquarantine" }}
+{{ end }}
+
+{{/* Creates arguments depending on the command used */}}
+{{ $args := parseArgs 1 $syntax
+	(carg "user" "target")
+	(carg "string" "reason") }}
+{{ $user := $args.Get 0 }}
+{{ $reason := or ($args.Get 1) "(None given)" }}
+
+{{/* What to do depending on what command was used */}}
+{{ $color := 14275367 }}
+{{ $title := "Quarantine Added" }}
+{{ $success := false }}
+{{ if eq $type "quarantine" }}
+	{{ if dbGet $user.ID "quarantine" }}
+		{{ printf "This user is already quarantined! Use `%sunquarantine` to remove their quarantine!" .ServerPrefix }}
+		{{ return }}
+	{{ else }}
+		{{ giveRoleID $user.ID $quarantineRole }}
+		{{ dbSet $user.ID "quarantine" 1 }}
+		{{ $success = true }}
+		{{ printf "Successfully added quarantine to `%s`!" $user.Username }}
+	{{ end }}
+{{ else if eq $type "unquarantine" }}
+	{{ if not (dbGet $user.ID "quarantine") }}
+		{{ printf "This user is not quarantined! Use `%squarantine` to quarantine the user!" .ServerPrefix }}
+		{{ return }}
+	{{ else }}
+		{{ takeRoleID $user.ID $quarantineRole }}
+		{{ dbDel $user.ID "quarantine" }}
+		{{ $color = 9453744 }}
+		{{ $title = "Quarantine Removed" }}
+		{{ $success = true }}
+		{{ printf "Successfully removed quarantine from `%s`!" $user.Username }}
+	{{ end }}
+{{ else }}
+	{{ printf "An error has occurred. Please contact a server admin." }}
+{{ end }}
+
+{{/* The log message to send */}}
+{{ $embed := cembed
+	"title" $title
+	"description" (printf ">>> **Member Quarantined:** <@%d> *(ID %d)*\n**Responsible Moderator:** <@%d> *(ID %d)*\n**Reason:** `%s`" $user.ID $user.ID .User.ID .User.ID $reason)
+	"color" $color
+	"footer" (sdict
+		"text" (print .User.Username " (ID " .User.ID ")" )
+		"icon_url" (.User.AvatarURL "Moderator") )
+	"timestamp" currentTime
+}}
+{{ sendMessage $logChannel $embed }}
