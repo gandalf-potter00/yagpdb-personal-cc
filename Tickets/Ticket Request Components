@@ -1,6 +1,6 @@
 {{/*
     Ticket request embed menu buttons, approve, approve (no ticket), deny, and deny+warn buttons (note: cannot dm the user as you cannot dm a targetted user. You can only dm the triggering user).
-    Component Custom ID Regex: (ticketforms|approve|deny|approvenoticket|warnmisuse)
+    Message Component, Component Custom ID Regex: (ticketforms|approve|deny|approvenoticket|warnmisuse)
 
     Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
 */}}
