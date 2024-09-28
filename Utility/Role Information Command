@@ -1,0 +1,45 @@
+{{/*
+    Gives a list of information regarding the role provided. Also gives a list of permissions the role has
+    Command usage: -roleinfo <role:ID/Mention>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{ $args := parseArgs 1 (print "`" .ServerPrefix "roleinfo <role:ID/Name>")
+	(carg "role" "Role") }}
+{{ $role := $args.Get 0 }}
+{{ $permList := "" }}
+{{ $rolePerms := $role.Permissions }}
+{{ range $permName, $permBitset := .Permissions }}
+	{{- if bitwiseAnd $rolePerms . }}
+		{{- $permList = joinStr ", " $permList $permName }}
+	{{- end -}}
+{{ end }}
+{{ if eq (len $permList) 0}}
+	{{ $permList = "(None)" }}
+{{ end }}
+{{ $no := "❌" }}
+{{ $yes := "✅" }}
+{{ $hoisted := $no }}
+{{ $mentionable := $no }}
+{{ $managed := $no }}
+{{ if $role.Hoist }}
+	{{ $hoisted = $yes }}
+{{ end }}
+{{ if $role.Mentionable }}
+	{{ $mentionable := $yes }}
+{{ end }}
+{{ if $role.Managed }}
+	{{ $managed := $yes }}
+{{ end }}
+
+{{ if $args.IsSet 0 }}
+	{{ $embed := sendMessage nil (cembed
+		"title" "Role Information"
+		"color" $role.Color
+		"description" (printf "**General**\n> **Role:** <@&%d>\n> **Name:** %s\n> **ID:** `%d`\n> **Color:** `#%x`\n> **Hoisted:** %s\n> **Mentionable:** %s\n> **Managed:** %s\n> **Position:** `%d/%d`\r**List of Permissions:**\n> `%s`"
+                       $role.ID $role.Name $role.ID $role.Color $hoisted $mentionable $managed $role.Position (len .Guild.Roles) $permList) )
+	}}
+{{ else }}
+	{{ return }}
+{{ end }}
