@@ -1,0 +1,112 @@
+{{/*
+    Initiates a vote for a user who appealed. Allows optional roles to be pinged.
+    Command usage: -vote <user:ID/Mention> <ticketchannel:ID/Mention> <reason:text>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $voteChannel := 1243805072668884993 }}
+{{ $rolesToPing := cslice 1233161190499156061 1233161228269129780 1233161246996693086 }}
+{{ $announcementChannelID := 1223021069489668250 }}
+{{ $time := toDuration "15s" }} {{/* Vote duration */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ $rolePings := "" }}
+{{ range $rolesToPing }}
+	{{ $rolePings = joinStr "" (printf "<@&%d>" . ) $rolePings }}
+{{ end }}
+
+{{ $verdict := "TBD" }} {{/* To allow it to be modified later */}}
+{{ if not .ExecData }} {{/* If the vote is being initiated */}}
+    {{ $args := parseArgs 3 (print "`" .ServerPrefix "vote <user:ID/mention> <ticket:ID/mention> <reason>`")
+        (carg "member" "Appealer")
+        (carg "channel" "Ticket")
+        (carg "string" "Reason") }}
+    {{ $user := ($args.Get 0).User }}
+    {{ $ticket := $args.Get 1 }}
+    {{ $reason := $args.Get 2 }}
+    {{ if $args.IsSet 2 }} {{/* If all arguments are set correctly */}}
+		{{ $appealer := .User }}
+        {{ $voteEmbed := complexMessage 
+            "content" $rolePings
+            "embed" (cembed 
+                "title" "Ban Appeal Vote"
+                "description" (print ">>> **Name:** " $user.Mention "\n **ID:** " $user.ID "\n **Ban Reason:** " $reason "\n **Verdict:** " $verdict "\n **Ticket:** <#" $ticket.ID "> \n \n Vote ends on <t:" (currentTime.Add $time).Unix ":F>" )
+                "color" 16754176
+                "footer" (sdict
+                    "text" (print .User.Username " (ID " .User.ID ")" )
+                    "icon_url" (.User.AvatarURL "Moderator") )
+                "timestamp" currentTime
+        )}}
+        {{ $x := sendMessageNoEscapeRetID $voteChannel $voteEmbed }}
+        {{ addMessageReactions $voteChannel $x "👍" "👎" }}
+        {{ sendMessage nil "Vote successfully sent!" }}
+		{{ $voteMessage := getMessage $voteChannel $x }} {{/* Grabs the message object for the vote embed */}}
+		{{ if $voteMessage.Embeds }} {{/* If the vote was made */}}
+			{{ $voteEmbed := structToSdict (index $voteMessage.Embeds 0) }}
+			{{ range $k, $v := $voteEmbed }} {{/* Changes the embed from type struct to type sdict so that it can be modified later */}}
+                {{- if eq (kindOf $v true) "struct" }}
+                    {{- $voteEmbed.Set $k (structToSdict $v) }}
+                {{- end }}
+			{{ end }}
+			{{ if $voteEmbed.Footer }} 
+				{{ $voteEmbed.Footer.Set "Icon_URL" $voteEmbed.Footer.IconURL }}
+			{{ end }} {{/* Now the embed is converted to sdict */}}
+			{{ $sdictToSend := sdict "user" $user "ticket" $ticket "reason" $reason "voteEmbed" $voteEmbed "x" $x "appealer" $appealer}} {{/* Defines variables used to be used later when the command is run again */}}
+			{{ execCC .CCID $voteChannel $time.Seconds $sdictToSend }} {{/* Runs the command after the vote ends so that the verdict can be decided */}}
+		{{ end }}
+	{{ else }} {{/* If not enough arguments are given */}}
+		{{ return }}
+	{{ end }}
+{{ else }} {{/* If the command is being run again (after the vote ends) */}}
+	{{/* Defining a bunch of variables, both new and that were used the first time */}}
+	{{ $thumbsUp := "👍" }}
+	{{ $thumbsDown := "👎" }}
+	{{ $upCount := 0 }} {{ $downCount := 0 }}
+	{{ $sdictRetrieved := sdict .ExecData }}
+	{{ $user := $sdictRetrieved.Get "user" }}
+	{{ $ticket := $sdictRetrieved.Get "ticket" }}
+	{{ $reason := $sdictRetrieved.Get "reason" }}
+	{{ $voteEmbed := $sdictRetrieved.Get "voteEmbed" }}
+	{{ $x := $sdictRetrieved.Get "x" }}
+	{{ $appealer := $sdictRetrieved.Get "appealer" }}
+	{{ $voteMessage := getMessage $voteChannel $x }}
+	{{/* Variables defined */}}
+	{{ range $voteMessage.Reactions }} {{/* Checks the number of upvotes and downvotes */}}
+		{{- if eq .Emoji.Name $thumbsUp }}
+			{{- $upCount = .Count }}
+		{{- end -}}
+		{{- if eq .Emoji.Name $thumbsDown }}
+			{{- $downCount = .Count }}
+    	{{- end -}}
+	{{ end }} 
+	{{/* Various verdicts depending on the votes or if the user was banned from appeals or on cooldown for appeals */}}
+	{{ if dbGet $user.ID "appealCooldown" }}
+		{{ $verdict = "Denied (user on cooldown)" }}
+		{{ $voteEmbed.Set "color" 14040124 }}
+	{{ else if dbGet $user.ID "appealBan" }}
+		{{ $verdict = "Denied (user banned from appeals)" }}
+		{{ $voteEmbed.Set "color" 14040124 }}
+    {{ else if gt $upCount $downCount }}
+		{{ $verdict = "Approved" }}
+		{{ $voteEmbed.Set "color" 6473311 }}
+    {{ else if gt $downCount $upCount }}
+		{{ $verdict = "Denied" }}
+		{{ $voteEmbed.Set "color" 14040124 }}
+    {{ else if eq $upCount $downCount }}
+		{{ $verdict = "Undecided" }}
+	{{ end }}
+	{{/* Once the verdict is decided, the embed is changed */}}
+	{{ $voteEmbed.Set "description" (print ">>> **Name:** <@" $user.ID "> \n**ID:** " $user.ID "\n**Ban Reason:** " $reason "\n**Verdict:** " $verdict "\n**Ticket:** <#" $ticket.ID "> \n\nVote ended: " (sub $upCount 1) $thumbsUp ":" (sub $downCount 1) $thumbsDown ) }}
+	{{ editMessage $voteChannel $x (complexMessageEdit "content" $rolePings "embed" $voteEmbed) }}
+	{{ deleteAllMessageReactions $voteChannel $x }} {{/* Deletes all reactions so that there's no confusion */}}
+	{{/* Sends a message to notify the user who conducted the appeal of the verdict if the user appealing wasn't put on cooldown or banned from appeals */}}
+	{{ if or (dbGet $user.ID "appealCooldown") (dbGet $user.ID "appealCooldown") }}
+		{{ sendMessage $announcementChannelID (print "The appeal made in <#" $ticket.ID "> was `" $verdict "`! Check " $voteMessage.Link) }}
+	{{ else }}
+		{{ sendMessage $announcementChannelID (print "<@" $appealer.ID "> The appeal made in <#" $ticket.ID "> was `" $verdict "`! Check " $voteMessage.Link) }}
+	{{ end }}
+{{ end }}
