@@ -1,0 +1,10 @@
+{{/*
+    Provides a list of users that are on cooldown and when they will be off cooldown. This command is very minimal as it was just used as a quick reference.
+    Command usage: -oncooldown
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{ range $entry := dbTopEntries "appealCooldown" 100 0 }}
+{{ print $entry.User.Username " *(ID " $entry.UserID ")*" }} : ends {{ print "<t:" $entry.ExpiresAt.Unix ":R>" }}
+{{ end }}
