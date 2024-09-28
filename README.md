@@ -1,8 +1,12 @@
 ## Preface 
 These custom commands are imported from all of the working cc's I have made. These haven't been tested to be used for other servers, but rather for my own personal use. You most likely will not find a use for these commands. This repository is simply so that I can safely export my work somewhere without worry of running out of space to write more cc's. Check out my other repositories for YAGPDB if you want cc's that are geared for servers other than my own.
 ## Command Information
-Below is a list of all custom commands in this repository and the intended use of each
-- none yet
+Below is a list of all custom command categories in this repository and the intended use of each
+- Appeal System: A system that is used for Thinking Project's banned section. Ban appeals are taken seriously by our group and can be quite tedious to deal with, so I devised a system to make managing them much easier. There are a variety of utilities that I use that you may find useful yourself, but may require more outside configuration than what is presented
+- Moderation: Includes both moderation replacement commands and other miscellaneous moderation commands. The replacements have a `README.md` file that I recommend reading if you are interested in extra features for the basic moderation commands (ban, warn, etc.). The other commands are unique commands used in Thinking Project that may be of little use to you
+- Role Changers: Not really moderation commands, although could be. The commands are meant to toggle the roles of a user (fully remove or readd the roles of a user). It was used for fun and doesn't really have any pracitcal applications
+- Utility: Some basic commands that can be used to get information regarding users or roles. I'm pretty sure these commands already exist in some way with the bot, but I mostly did it as a proof of concept and not because they were useful.
+- Tickets: Thinking Project had an issue with users making tickets without providing evidence. Many tickets were created and closed shortly after due to the ticket not being able to be conducted due to a lack of evidence. This system is meant to be a request system (much like dyno's ban appeal system, of which I took inspiration from). I plan on adding a lot to this in the future, but it works well in its current state. I don't know if this will be of much use to you as it was programmed specifically for the needs of Thinking Project, but you are more than welcome to do whatever with it.
 
 ## Credits
-All commands were written by gandalf-potter00. Special thanks to the YAGPDB support group for assisting me in writing some of the more complicated commands.
+All commands were written by gandalf-potter00. Special thanks to the YAGPDB support group for assisting me in writing some of the more complicated commands. Some inspiration was taken from features of Dyno bot, like its ban appeals and modstats features.
