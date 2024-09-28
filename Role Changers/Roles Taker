@@ -1,6 +1,6 @@
 {{/*
     Takes all roles from a user. Also creates a log of the user that was affected, who ran the command and what roles were taken. Has an undo command.
-    Command usage: -takeroles
+    Command usage: -takeroles <user:ID/Mention>
 
     Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
 */}}
