@@ -1,0 +1,40 @@
+{{/*
+    Applies a timeout of a set duration to a user. The user who runs this command will be put on a cooldown to prevent abuse. Used for support team roles so they can use timeouts without being allowed to use the main timeout command.
+    Command usage: -htimeout <user:ID/Mention> <reason:text> (the h stands for for "helpful member" as that is the support team name for Thinking Project)
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $cooldown := toDuration "60m" }} {{/* how long until the command can be used again*/}}
+{{ $duration := toDuration "10m" }} {{/* how long the targetted user should be timed out for */}}
+{{ $roles := cslice 1233161190499156061 1233161228269129780 }} {{/* list of roles IDs to not timeout */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ $onCooldown := dbGet .User.ID "htoCooldown" }}
+{{ $dbTime := $onCooldown.ExpiresAt }}
+{{ if eq (toInt $onCooldown.Value) 1 }} {{/* checks if the user is on cooldown*/}}
+	{{ print .User.Mention " you are still on cooldown! You can use the command <t:" $dbTime.Unix ":R>" }}
+{{ else }} {{/* if not on cooldown, continue with the timeout*/}}
+	{{ $args := parseArgs 2 (print "`" .ServerPrefix "htimeout <user:mention/ID> <reason>`")
+        (carg "member" "Member")
+        (carg "string" "Reason") }}
+    {{ $user := ($args.Get 0).User.ID }}
+    {{ $reason := $args.Get 1 }}
+	{{ $memberRoles := ($args.Get 0).Roles }}
+	{{ $found := false }}
+	{{ range $memberRoles }} {{/* checks if the targeted user has a protected role */}}
+		{{ if in $roles . }}
+			{{ $found = true }}
+			{{ break }}
+		{{ end }}
+	{{ end }}
+	{{ if $found }} {{/* if user is protected */}}
+		{{ print "`" ($args.Get 0).User.Username "` cannot be timed out. Try a different user, or ping a staff member to assist you." }}
+	{{ else }} {{/* if user is not protected */}}
+        {{ execAdmin "timeout" $user (toInt $duration.Minutes) $reason }} {{/* times the targeted user out for the duration configured */}}
+        {{ dbSetExpire .User.ID "htoCooldown" 1 (toInt $cooldown.Seconds) }} {{/* sets the user on cooldown */}}
+	{{ end }}
+{{ end }}
