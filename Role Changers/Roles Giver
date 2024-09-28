@@ -1,0 +1,37 @@
+{{/*
+    Gives all roles originally taken from a user back. Also creates a log of the user that was affected and who ran the command. The undo command to the roles taker.
+    Command usage: -giveroles <user:ID/Mention>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+
+{{/* Configurable Values */}}
+{{ $logChannel := 1243805072668884993 }} {{/* Channel to log the action */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{$args := parseArgs 1 (printf "`%sgiveroles <user:ID/Mention>`" .ServerPrefix)
+	(carg "member" "Target")}}
+{{ $member := ($args.Get 0) }}
+
+{{ $takenRoles := dbGet $member.User.ID "roles" }}
+{{ if $takenRoles }}
+	{{ range $takenRoles.Value }}
+		{{- giveRoleID $member.User.ID . }}
+	{{ end }}
+	{{ dbDel $member.User.ID "roles" }}
+	{{ printf "`%s` has regained their rights!" $member.User.Username}}
+	{{ $embed := cembed
+		"title" "Give Roles"
+		"description" (printf "> **Affected User:** <@%d> *(ID %d)*\n> **Responsible Moderator:** <@%d> *(ID %d)*)" $member.User.ID $member.User.ID .User.ID .User.ID)
+		"color" 2681656
+		"footer" (sdict
+			"text" (printf "%s (ID %d)" .User.Username .User.ID)
+			"icon_url" (.User.AvatarURL "256") )
+	}}
+	{{ sendMessage $logChannel $embed }}
+{{ else }}
+	{{ printf "`%s` already has their roles!" $member.User.Username}}
+{{ end }}
