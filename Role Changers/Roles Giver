@@ -5,7 +5,6 @@
     Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
 */}}
 
-
 {{/* Configurable Values */}}
 {{ $logChannel := 1243805072668884993 }} {{/* Channel to log the action */}}
 {{/* End of Configurable Values */}}
