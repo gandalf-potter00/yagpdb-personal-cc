@@ -1,0 +1,116 @@
+{{/*
+    Response for when a form is filled out for a ticket request
+    Modal Submission, Component Custom ID Regex: (restore|report|warn)
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $cooldown := toDuration "120m" }} {{/* How long until a user can fill out another form */}}
+{{ $channelToSend := 1243805072668884993 }} {{/* Where the form results should be sent to */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ $dbCount := dbGet 0 "ticketRequestCount" }}
+{{/* Determines what form was filled out and constructs an embed based on that */}}
+{{ $embed := "" }}
+{{ if eq .CustomID "restore" }}
+	{{ if $dbCount }} {{/* Adds 1 to the count for restore requests */}}
+		{{ $dbCount.Value.Set "restore" (add ($dbCount.Value.Get "restore") 1) }}
+		{{ dbSet 0 "ticketRequestCount" $dbCount.Value }}
+	{{ else }}
+		{{ dbSet 0 "ticketRequestCount" (sdict "restore" 1 "report" 0 "warn" 0) }}
+	{{ end }}
+	{{ $dbCount = dbGet 0 "ticketRequestCount" }}
+	{{ $link := index .Values 0 }}
+	{{ $game := index .Values 1 }}
+	{{ $description := index .Values 2 }}
+	{{ $evidence := index .Values 3 }}
+	{{ $embed = cembed
+		"title" (printf "Restore Requested - #%d" ($dbCount.Value.Get "restore"))
+		"description" (printf "> **Request from**: <@%d> *(ID %d)*\n> **Status:** `TBD`" .User.ID .User.ID)
+		"fields" (cslice
+			(sdict "name" "What is your Roblox Profile Link?" "value" (print "```" $link "```"))
+			(sdict "name" "Which game did you lose data in?" "value" (print "```" $game "```"))
+			(sdict "name" "General description of what was lost." "value" (print "```" $description "```"))
+			(sdict "name" "Evidence" "value" (print "```" $evidence "```")))
+		"color" 15446378
+		"timestamp" currentTime
+	}}
+{{ else if eq .CustomID "report" }}
+	{{ if $dbCount }} {{/* Adds 1 to the count for player report requests */}}
+		{{ $dbCount.Value.Set "report" (add ($dbCount.Value.Get "report") 1) }}
+		{{ dbSet 0 "ticketRequestCount" $dbCount.Value }}
+	{{ else }}
+		{{ dbSet 0 "ticketRequestCount" (sdict "restore" 0 "report" 1 "warn" 0) }}
+	{{ end }}
+	{{ $dbCount = dbGet 0 "ticketRequestCount" }}
+	{{ $link := index .Values 0 }}
+	{{ $username := index .Values 1 }}
+	{{ $reason := index .Values 2 }}
+	{{ $evidence := index .Values 3 }}
+	{{ $embed = cembed
+		"title" (printf "Player/User Report Requested - #%d" ($dbCount.Value.Get "report"))
+		"description" (printf "> **Request from**: <@%d> *(ID %d)*\n> **Status:** `TBD`" .User.ID .User.ID)
+		"fields" (cslice
+			(sdict "name" "What is your Roblox Profile Link?" "value" (print "```" $link "```"))
+			(sdict "name" "What is their Roblox/Discord username?" "value" (print "```" $username "```"))
+			(sdict "name" "What are you reporting them for?" "value" (print "```" $reason "```"))
+			(sdict "name" "Evidence" "value" (print "```" $evidence "```")))
+		"color" 15446378
+		"timestamp" currentTime
+	}}
+{{ else if eq .CustomID "warn" }}
+	{{ if $dbCount }} {{/* Adds 1 to the count for warn appeal requests */}}
+		{{ $dbCount.Value.Set "warn" (add ($dbCount.Value.Get "warn") 1) }}
+		{{ dbSet 0 "ticketRequestCount" $dbCount.Value }}
+	{{ else }}
+		{{ dbSet 0 "ticketRequestCount" (sdict "restore" 0 "report" 0 "warn" 1) }}
+	{{ end }}
+	{{ $dbCount = dbGet 0 "ticketRequestCount" }}
+	{{ $reason := index .Values 0 }}
+	{{ $removeReason := index .Values 1 }}
+	{{ $add := "(Did not fill out)" }}
+	{{ if index .Values 2 }}
+		{{ $add = index .Values 2 }}
+	{{ end }}
+	{{ $embed = cembed
+		"title" (printf "Warn Appeal Requested - #%d" ($dbCount.Value.Get "warn"))
+		"description" (printf "> **Request from**: <@%d> *(ID %d)*\n> **Status:** `TBD`" .User.ID .User.ID)
+		"fields" (cslice
+			(sdict "name" "What was the warn reason?" "value" (print "```" $reason "```"))
+			(sdict "name" "Why do you think your warn should be removed?" "value" (print "```" $removeReason "```"))
+			(sdict "name" "Is there anything you would like to add?" "value" (print "```" $add "```")))
+		"color" 15446378
+		"timestamp" currentTime
+	}}
+{{ else }}
+	{{ return }}
+{{ end }}
+
+
+{{/* Form response to send */}}
+{{ $button1 := cbutton "label" "Approve" "style" "success" "custom_id" "approve" }}
+{{ $button2 := cbutton "label" "Approve (no ticket)" "style" "secondary" "custom_id" "approveNoTicket" }}
+{{ $button3 := cbutton "label" "Deny" "style" "danger" "custom_id" "deny" }}
+{{ $button4 := cbutton "label" "Deny+Warn" "style" "primary" "custom_id" "warnMisuse" }}
+{{ $message := complexMessage "embed" $embed "buttons" (cslice $button1 $button2 $button3 $button4) }}
+{{ $x := sendMessageRetID $channelToSend $message }}
+
+
+{{/* Adds the sent message to the database to be used later */}}
+{{ if not (dbGet 0 "ticketRequests") }} 
+	{{ dbSet 0 "ticketRequests" (sdict (toString $x) (toString .User.ID)) }}
+{{ else }}
+	{{ $db := dbGet 0 "ticketRequests" }}
+	{{ $db.Value.Set (toString $x) (toString .User.ID) }}
+	{{ dbSet 0 "ticketRequests" $db.Value }}
+{{ end }}
+
+
+{{/* Adds a cooldown to the user to prevent them from making multiple reports */}}
+{{ dbSetExpire .User.ID "ticketRequestCooldown" 1 (toInt $cooldown.Seconds) }}
+
+{{/* Response to let the user know their form was sent */}}
+{{ sendResponse nil (complexMessage "content" (printf "Request has been sent! Please wait %s to fill out another ticket request" (humanizeDurationMinutes $cooldown)) "ephemeral" true) }}
