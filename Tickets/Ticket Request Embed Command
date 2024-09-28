@@ -1,0 +1,33 @@
+{{/*
+    Displays an embed for what tickets can be requested as well as providing a menu to select what ticket to request
+    Command usage: -ticketrequestembed
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{ deleteTrigger 0 }}
+{{ $menu := cmenu 
+	"type" "text"
+	"placeholder" "Select a ticket type"
+	"custom_id" "ticketforms"
+	"options" (cslice
+		(sdict "label" "Request a restore" "value" "restore" "description" "Request a restore for lost data from one of our games" "emoji" (sdict "name" "🎟️"))
+		(sdict "label" "Report a player/user" "value" "report" "description" "Report Discord users or Roblox players" "emoji" (sdict "name" "📣"))
+		(sdict "label" "Warn Appeal" "value" "warn" "description" "Request an appeal for a warning you received" "emoji" (sdict "name" "⚠️")))
+	"max_values" 1
+}}
+{{ $message := complexMessage 
+	"embed" (cembed
+		"title" "Ticket Requests"
+		"color" 0
+		"description" "Use the drop down list below to select what kind of ticket you would like to open. Read below to see what is required for each ticket.\n\n**If you do not provide what is required for the ticket after a ticket is opened, you will receive a warning.**"
+		"fields" (cslice
+			(sdict "name" "Request a restore" "value" "Be prepared to provide your username, a description of what you lost, and proof in the form of screenshots or video." "inline" false)
+			(sdict "name" "Report a player" "value" "Be prepared to provide your username, their username, a description of what they've done, and proof in the form of screenshots or video." "inline" false)
+			(sdict "name" "Warn Appeal" "value" "Be prepared to provide the reason for your warning and why you believe the warning should be removed." "inline" false))
+		"footer" (sdict
+			"text" "Joke requests will result in punishment"))
+	"menus" $menu
+}}
+
+{{ sendMessage nil $message }}
