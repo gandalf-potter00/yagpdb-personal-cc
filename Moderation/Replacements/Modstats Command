@@ -1,0 +1,73 @@
+{{/*
+    Displays the modstats of a user from the past 7 days, 30 days, and all time.
+    Command usage: -modstats <user:ID/Mention>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{ $args := parseArgs 0 (print "`" .ServerPrefix "modstats <user:ID/Mention>`")
+		(carg "member" "Member") }}
+{{ $user := .User }}
+{{ if $args.IsSet 0 }} {{/* If a user was provided, grab their modstats instead of the user who ran the command */}}
+	{{ $user = ($args.Get 0).User }}
+{{ end }}
+
+{{ $modstats := dbGet $user.ID "modStats" }} {{/* Grabs the user's modstats and assigns each as a variable for later use */}}
+{{ $w := $modstats.Value.Get "w" }}
+{{ $w7 := $modstats.Value.Get "w7" }}
+{{ $w30 := $modstats.Value.Get "w30" }}
+{{ $t := $modstats.Value.Get "t" }}
+{{ $t7 := $modstats.Value.Get "t7" }}
+{{ $t30 := $modstats.Value.Get "t30" }}
+{{ $k := $modstats.Value.Get "k" }}
+{{ $k7 := $modstats.Value.Get "k7" }}
+{{ $k30 := $modstats.Value.Get "k30" }}
+{{ $b := $modstats.Value.Get "b" }}
+{{ $b7 := $modstats.Value.Get "b7" }}
+{{ $b30 := $modstats.Value.Get "b30" }}
+{{ $to := add $w $t $k $b }}
+{{ $to7 := add $w7 $t7 $k7 $b7 }}
+{{ $to30 := add $w30 $t30 $k30 $b30 }}
+
+{{ $roleColor := 0 }} {{/* Sets a default color Black in case a user doesn't have a with a color */}}
+{{ $position := 0 }} {{/* Placeholder variable */}}
+{{ $memberRoles := (getMember $user.ID).Roles }}
+{{ range .Guild.Roles }}
+	{{ if and (in $memberRoles .ID) (.Color) (lt $position .Position) }} {{/* If the member has the role, if the role has a color, and if the value of the position variable is less than the value of the role's position */}}
+		{{ $position = .Position }} {{/* Sets the new position value so it can be checked with othe roles */}}
+		{{ $roleColor = .Color }} {{/* Sets the new role color */}}
+	{{ end }}
+{{ end }}
+
+{{ if $modstats }}
+	{{/* Embed to send */}}
+    {{ $x := sendMessage nil (cembed
+      "title" "Moderation Statistics"
+      "author" (sdict
+                "name" (printf "%s (ID %d)" $user.Username $user.ID)
+                "icon_url" ($user.AvatarURL "256") )
+      "color" $roleColor
+      "fields" (cslice
+                (sdict "name" "Warns (last 7 days):" "value" (toString $w7) "inline" true)
+                (sdict "name" "Warns (last 30 days):" "value" (toString $w30) "inline" true)
+                (sdict "name" "Warns (all time):" "value" (toString $w) "inline" true)
+                (sdict "name" "Timeouts (last 7 days):" "value" (toString $t7) "inline" true)
+                (sdict "name" "Timeouts (last 30 days):" "value" (toString $t30) "inline" true)
+                (sdict "name" "Timeouts (all time):" "value" (toString $t) "inline" true)
+                (sdict "name" "Kicks (last 7 days):" "value" (toString $k7) "inline" true)
+                (sdict "name" "Kicks (last 30 days):" "value" (toString $k30) "inline" true)
+                (sdict "name" "Kicks (all time):" "value" (toString $k) "inline" true)
+                (sdict "name" "Bans (last 7 days):" "value" (toString $b7) "inline" true)
+                (sdict "name" "Bans (last 30 days):" "value" (toString $b30) "inline" true)
+                (sdict "name" "Bans (all time):" "value" (toString $b) "inline" true)
+                (sdict "name" "Total (last 7 days):" "value" (toString $to7) "inline" true)
+                (sdict "name" "Total (last 30 days):" "value" (toString $to30) "inline" true)
+                (sdict "name" "Total (all time):" "value" (toString $to) "inline" true) )
+      "timestamp" currentTime
+      "footer" (sdict
+                "text" (printf "%s (ID %d)" .User.Username .User.ID)
+                "icon_url" (.User.AvatarURL "256") ) )
+    }}
+{{ else }}
+	{{ print "`" $user.Username "` does not have any modstats yet." }}
+{{ end }}
