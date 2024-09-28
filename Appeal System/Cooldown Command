@@ -1,0 +1,68 @@
+{{/*
+    Applies a role to a user and takes it after a set duration. Creates a database entry to be referenced later (in the event a user leaves and rejoins). Additional code is necessary if you want to utilize the database entry (i.e. adding code to the join logs). Creates a log of who was put on cooldown, who ran the command and when the cooldwon ends.
+    Command usage: -cooldown <user:ID/Mention>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $roleID := 1233161190499156061 }} {{/* Cooldown role to be applied */}}
+{{ $cooldown := toDuration "1m" }} {{/* Time until the cooldown role is removed */}}
+{{ $logChannel := 1243805072668884993 }} {{/* Channel to send log embed */}}
+{{ $announcementChannel := 1223021069489668250 }} {{/* Channel to send update messages */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ if not .ExecData }} {{/* If the command has not been run yet */}}
+    {{ $args := parseArgs 1 (print "`" .ServerPrefix "cooldown <user:ID/Mention>`\n\n**Aliases:** `appealcooldown`")
+        (carg "member" "User") }}
+    {{ if $args.IsSet 0 }} {{/* If the member provided is a valid user */}}
+        {{ $user := ($args.Get 0).User }}
+        {{ $dbCheck := dbGet $user.ID "appealCooldown" }}
+        {{ if $dbCheck }} {{/* If the user is already on cooldown */}}
+            {{ print "`" $user.Username "` is already on cooldown." }}
+        {{ else }} {{/* If the user is not on cooldown */}}
+            {{ giveRoleID $user.ID $roleID }}
+			{{ $currentTime := currentTime.Unix }}
+            {{ dbSet $user.ID "appealCooldown" $currentTime }} {{/* Creates a database entry for the join feed in case a member leaves and rejoins */}}
+            {{ $dbTime := currentTime.Add $cooldown }}
+            {{ printf "`%s` has successfully been put on appeal cooldown! They will be off cooldown <t:%d:R>" $user.Username $dbTime.Unix }}
+            {{ $embed := cembed
+                "title" "Appeal Cooldown Added"
+                "description" (print ">>> **Member on cooldown:** " $user.Mention " *ID (" $user.ID ")* \n **Eligible to reappeal on:** <t:" $dbTime.Unix ":F> \n **Reasponsible Moderator:** " .User.Mention )
+                "color" 16754176
+                "footer" (sdict
+                    "text" (print .User.Username " (ID " .User.ID ")" )
+                    "icon_url" (.User.AvatarURL "Moderator") )
+                "timestamp" currentTime
+            }}
+            {{ sendMessage $logChannel $embed }}
+			{{ $sdictToSend := sdict "user" $user "unix" $currentTime }} {{/* Data to be saved for when the command is ran again to take away the user's cooldown role */}}
+			{{ execCC .CCID nil (sub (toInt $cooldown.Seconds) 5) $sdictToSend }} {{/* Executes the command again after the cooldown time is up to remove the user's cooldown role */}}
+        {{ end }}
+    {{ end }}
+{{ else }}
+	{{ $sdictRetrieved := sdict .ExecData }} {{/* Data from when the command was ran for this user last */}}
+	{{ $user := $sdictRetrieved.Get "user" }}
+	{{ $currentTime := $sdictRetrieved.Get "unix" }}
+	{{ if eq (toInt (dbGet $user.ID "appealCooldown").Value) (or (toInt $currentTime) 1) }} {{/* If the user is still on cooldwon */}}
+        {{ if getMember $user.ID }} {{/* If the user is in the server still */}}
+            {{ if not (dbGet $user.ID "appealBan") }} {{/* If the user isn't banned from Appeals */}}
+                {{ takeRoleID $user.ID $roleID }} {{/* Removes the user's cooldown role */}}
+                {{ $embed := cembed
+                    "title" "Appeal Cooldown Ended"
+                    "description" (print "> **Member off cooldown:** <@" $user.ID "> *ID (" $user.ID ")*" )
+                    "color" 54998
+                    "timestamp" currentTime
+                }}
+                {{ sendMessage $logChannel $embed }}
+            {{ else }} {{/* If the user is banned from Appeals */}}
+                {{ sendMessage $announcementChannel (print "The user <@" $user.ID "> was not taken off appeal cooldown because they have been banned from appeals. To unban them from appeals, use the command `;appealunban`.") }}
+            {{ end }}
+        {{ else }}  {{/* If the user is no longer in the server */}}
+            {{ sendMessage $announcementChannel (print "The user <@" $user.ID "> was not taken off appeal cooldown because they are no longer in the server. They will be able to reappeal if they rejoin the server.") }}
+        {{ end }}
+		{{ dbDel $user.ID "appealCooldown" }}
+	{{ end }}
+{{ end }}
