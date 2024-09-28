@@ -1,0 +1,56 @@
+{{/*
+    Gives a list of permissions a member has in a channel
+    Command usage: -perms <user:ID/Mention> <channel:ID/Mention>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{ $args := parseArgs 0 (print "`" .ServerPrefix "perms <user:ID/Mention> <channel:ID/Mention>`")
+	(carg "member" "Member")
+  	(carg "channel" "Channel") }}
+{{ $user := .User }}
+{{ $channel := .Channel }}
+{{ if $args.IsSet 0 }} {{/* If a user is specified, use that instead of the user who triggered the command */}}
+	{{ $user = ($args.Get 0).User }}
+{{ end }}
+{{ $member := getMember $user.ID }}
+{{ if $args.IsSet 1 }} {{/* If a channel is specified, use that instead of the channel the command was ran in */}}
+	{{ $channel = $args.Get 1 }}
+{{ end }}
+
+
+{{ $channelPerms := getTargetPermissionsIn $user.ID $channel.ID }}
+{{ $permList := "" }}
+{{ range $permName, $permBitset := .Permissions }} {{/* Ranges permissions to create a list of each permission a user has */}}
+	{{- if bitwiseAnd $channelPerms . }}
+		{{- $permList = joinStr ", " $permList $permName }}
+	{{- end -}}
+{{ end }}
+{{ if eq (len $permList) 0}}
+	{{ $permList = "(None)" }}
+{{ end }}
+
+
+{{ $roleColor := 0 }} {{/* Sets a default color Black in case a user doesn't have a with a color */}}
+{{ $position := 0 }} {{/* Placeholder variable */}}
+{{ $memberRoles := (getMember $user.ID).Roles }}
+{{ range .Guild.Roles }}
+	{{ if and (in $memberRoles .ID) (.Color) (lt $position .Position) }} {{/* If the member has the role, if the role has a color, and if the value of the position variable is less than the value of the role's position */}}
+		{{ $position = .Position }} {{/* Sets the new position value so it can be checked with othe roles */}}
+		{{ $roleColor = .Color }} {{/* Sets the new role color */}}
+	{{ end }}
+{{ end }}
+
+
+{{/* Embed to send */}}
+{{ $embed := sendMessage nil (cembed
+	"title" "Member Permissions"
+	"thumbnail" (sdict "url" ($user.AvatarURL "256"))
+	"color" $roleColor
+	"description" (printf "> **Member:** <@%d>\n> **Channel:** <#%d>\n**Permissions:**\n> `%s`"
+                  $user.ID $channel.ID $permList)
+	"footer" (sdict
+		"text" (print .User.Username " (ID " .User.ID ")" )
+		"icon_url" (.User.AvatarURL "Moderator") )
+	"timestamp" currentTime )
+}}
