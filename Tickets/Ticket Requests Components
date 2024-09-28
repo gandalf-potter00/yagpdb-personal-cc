@@ -1,0 +1,120 @@
+{{/*
+    Ticket request embed menu buttons, approve, approve (no ticket), deny, and deny+warn buttons (note: cannot dm the user as you cannot dm a targetted user. You can only dm the triggering user).
+    Component Custom ID Regex: (ticketforms|approve|deny|approvenoticket|warnmisuse)
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $cooldown := toDuration "120" }} {{/* How long until a user can fill out another form */}}
+{{ $approveOrDenyRoles := cslice 1259719839329681478 }} {{/* List of roles that can Approve or Deny ticket requests */}}
+{{ $silentApproveMessage := true }} {{/* Whether or not a request getting accepted without a ticket should be announced in a channel */}}
+{{ $denyMessage := true }} {{/* Whether or not a request getting denied should be announced in a channel */}}
+{{ $channelToSend := 1223021069489668250 }} {{/* Where the silent approval and denial should be announced if "$silentApproveMessage" or "$denyMessage" is true */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{/* Buttons to be disabled after approval/denial */}}
+{{ $button1 := cbutton "label" "Approve" "style" "success" "disabled" true }}
+{{ $button2 := cbutton "label" "Approve (no ticket)" "style" "secondary" "disabled" true }}
+{{ $button3 := cbutton "label" "Deny" "style" "danger" "disabled" true }}
+{{ $button4 := cbutton "label" "Deny+Warn" "style" "primary" "disabled" true }}
+
+{{/* Check if member has a role in $approveOrDeny */}}
+{{ $approveOrDenyPerms := false }}
+{{ range $approveOrDenyRoles }}
+	{{- if hasRoleID . }}
+		{{- $approveOrDenyPerms = true }}
+		{{- break }}
+	{{- end -}}
+{{ end }}
+
+{{ if eq .CustomID "ticketforms" }} {{/* If one of the menu buttons was selected */}}
+	{{ $modal := "" }}
+	{{ if dbGet .User.ID "ticketRequestCooldown" }} {{/* Checks if the user is on cooldown for ticket requests */}}
+		{{ sendResponse nil (complexMessage "content" (printf "You cannot create a ticket request at this time. Please wait until <t:%d:t> to fill out another ticket request form. Thank you!" (dbGet .User.ID "ticketRequestCooldown").ExpiresAt.Unix) "ephemeral" true) }}
+	{{ else if in .Values "restore" }} {{/* If the button was for restores */}}
+		{{ $modal = sdict
+			"title" "Request a restore"
+			"custom_id" "restore"
+			"fields" (cslice
+				(sdict "label" "What is your Roblox Profile Link?" "placeholder" "Go to your Roblox profile, paste the link here. E.g.: https://www.roblox.com/users/183490132/profile" "style" 2 "max_length" 100 "required" true)
+				(sdict "label" "Which game did you lose data in?" "placeholder" "NAT, SCPT, etc." "max_length" 100 "required" true)
+				(sdict "label" "General description of what was lost." "placeholder" "Rebirths, pets, hats, etc." "style" 2 "max_length" 500 "required" true)
+				(sdict "label" "Evidence" "placeholder" "Use https://gyazo.com/, https://streamable.com/, or a discord link to provide evidence here" "style" 2 "max_length" 500 "required" true))
+	}}
+	{{ else if in .Values "report" }} {{/* If the button was for player/user reports */}}
+		{{ $modal = sdict
+			"title" "Report a player/user"
+			"custom_id" "report"
+			"fields" (cslice
+				(sdict "label" "What is your Roblox Profile Link?" "placeholder" "Go to your Roblox profile, paste the link here. E.g.: https://www.roblox.com/users/183490132/profile" "style" 2 "max_length" 100 "required" true)
+				(sdict "label" "What is their Roblox/Discord username?" "placeholder" "USERNAME, not nickname or display name." "max_length" 100 "required" true)
+				(sdict "label" "What are you reporting them for?" "placeholder" "Be as specific as possible" "style" 2 "max_length" 500 "required" true)
+				(sdict "label" "Evidence" "placeholder" "Use https://gyazo.com/, https://streamable.com/, or a discord link to provide evidence here" "style" 2 "max_length" 500 "required" true))
+			}}
+	{{ else if in .Values "warn" }} {{/* If the button was for warn appeals */}}
+		{{ $modal = sdict
+			"title" "Warn Appeal Form"
+			"custom_id" "warn"
+			"fields" (cslice
+				(sdict "label" "What was the warn reason?" "placeholder" "Copy and paste the warn reason from the DM you received" "style" 2 "max_length" 750 "required" true)
+				(sdict "label" "Why do you think your warn should be removed?" "style" 2 "max_length" 750 "required" true)
+				(sdict "label" "Is there anything you would like to add?" "style" 2 "max_length" 750 "required" false)) 
+		}}
+	{{ end }}
+	{{ if $modal }}
+		{{ sendModal $modal }}
+	{{ end }}
+{{ else if or (eq .CustomID "approve") (eq .CustomID "approveNoTicket") (eq .CustomID "deny") (eq .CustomID "warnMisuse") }} {{/* If the request verdict is being chosen */}}
+	{{ if $approveOrDenyPerms }}
+		{{ $db := dbGet 0 "ticketRequests" }}
+		{{ $userID := toInt ($db.Value.Get (toString .Message.ID)) }} {{/* Grabs the user from the database entry stored from when the form was completed */}}
+		{{ $embed := structToSdict (index .Message.Embeds 0) }} {{/* Turning the embed into an sdict to be modified later */}}
+		{{ range $k, $v := $embed }}
+			{{- if eq (kindOf $v true) "struct" }}
+				{{- $embed.Set $k (structToSdict $v) }}
+			{{- end }}
+		{{ end }}
+		{{ if eq .CustomID "approve" }} {{/* If the ticket request was approved */}}
+			{{ $embed.Set "description" (printf "> **Request from**: <@%d> *(ID %d)*\n> **Status:** `Approved` by <@%d> *(ID %d)*" $userID $userID .User.ID .User.ID) }}
+			{{ $embed.Set "color" 4763221 }}
+			{{ sendMessage nil (printf "$ticket %d Ticket Request Approved" $userID) }} {{/* Uses Ticket Tool's command ticket feature to create a ticket */}}
+			{{ sendResponse nil (complexMessage "content" "Ticket request approved! A ticket has been made for the user." "ephemeral" true) }}
+		{{ else if eq .CustomID "approveNoTicket" }} {{/* If the ticket request was approved with not ticket needed */}}
+			{{ $embed.Set "description" (printf "> **Request from**: <@%d> *(ID %d)*\n> **Status:** `Approved (no ticket)` by <@%d> *(ID %d)*" $userID $userID .User.ID .User.ID) }}
+			{{ $embed.Set "color" 8244960 }}
+			{{ if $silentApproveMessage }}
+				{{ sendMessage $channelToSend (printf "<@%d> Your ticket request was approved, but not further action was deemed necessary. The issue has been resolved. No further action is needed from you." $userID) }}
+			{{ end }}
+			{{ sendResponse nil (complexMessage "content" "Ticket request approved without a ticket! If enabled, a message was sent to the user who requested a ticket." "ephemeral" true) }}
+		{{ else if eq .CustomID "deny" }} {{/* If the ticket request was denied */}}
+			{{ $embed.Set "description" (printf "> **Request from**: <@%d> *(ID %d)*\n> **Status:** `Denied` by <@%d> *(ID %d)*" $userID $userID .User.ID .User.ID) }}
+			{{ $embed.Set "color" 14628622 }}
+			{{ if $denyMessage }}
+				{{ sendMessage $channelToSend (printf "<@%d> Your ticket request has been denied. Please do not make another request for the same thing or you will be warned." $userID) }}
+			{{ end }}
+			{{ sendResponse nil (complexMessage "content" "Ticket request denied! If enabled, a message was sent to the user who requested a ticket." "ephemeral" true) }}
+		{{ else if eq .CustomID "warnMisuse" }} {{/* If the ticket request was denied and the user is to be warned */}}
+			{{ $embed.Set "description" (printf "> **Request from**: <@%d> *(ID %d)*\n> **Status:** `Denied/Warned` by <@%d> *(ID %d)*" $userID $userID .User.ID .User.ID) }}
+			{{ $embed.Set "color" 11868485 }}
+			{{ $content := "Ticket request denied! The user has also been warned!" }}
+			{{ if (getMember $userID) }}
+				{{ try }}
+					{{ execAdmin "warn" $userID "Misusing the ticket request system" }}
+				{{ catch }}
+					{{ $content = "Ticket request denied! The user could not be warned for an unknown reason." }}
+				{{ end }}
+			{{ else }}
+				{{ $content = "Ticket request denied! The user could not be warned as they are no longer a member of the server." }}
+			{{ end }}
+			{{ sendResponse nil (complexMessage "content" $content "ephemeral" true) }}
+		{{ end }}
+		{{ editMessage .Message.ChannelID .Message.ID (complexMessageEdit "embed" $embed "buttons" (cslice $button1 $button2 $button3 $button4)) }}
+		{{ $db.Value.Del (toString .Message.ID) }} {{/* Removes the request from the database since the request has been accepted */}}
+		{{ dbSet 0 "ticketRequests" $db.Value }}
+	{{ else }}
+		{{ sendResponse nil (complexMessage "content" "You do not have permission to use these buttons." "ephemeral" true) }}
+	{{ end }}
+{{ end }}
