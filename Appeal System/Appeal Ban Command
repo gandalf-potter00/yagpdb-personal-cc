@@ -1,0 +1,49 @@
+{{/*
+    Applies a role to a user to ban them from appeals. Also creates a log of the event. Creates a database entry to be used later (in the event a user leaves and rejoins). Additional code is necessary if you want to utilize the database entry (i.e. adding code to the join logs).
+    Command usage: -appealban <user:ID/Mention> <reason:text>
+
+    Visit https://discord.gg/6CQpsYASKs for my server if you need assistance
+*/}}
+
+{{/* Configurable Values */}}
+{{ $roleID := 1233161190499156061 }} {{/* Appeal ban role to be applied */}}
+{{ $logChannel := 1243805072668884993 }} {{/* Channel to send log embed */}}
+{{/* End of Configurable Values */}}
+
+
+{{/* Actual code (DO NOT TOUCH) */}}
+{{ $args := parseArgs 1 (print "`" .ServerPrefix "appealban <user:ID/Mention>`")
+	(carg "member" "User")
+	(carg "string" "Reason") }}
+{{ $user := ($args.Get 0).User }}
+{{ $reason := $args.Get 1 }}
+{{ $target := $args.Get 0 }}
+{{/* Checks if the user running the command has a higher rank thank the target */}}
+{{ $uRolePos :=  -1 }}{{ $tRolePos := -1 }}
+{{ range .Guild.Roles }}
+	{{ if and (in $.Member.Roles .ID) (gt .Position $uRolePos) }} {{ $uRolePos = .Position }} {{ end }}
+	{{ if and (in $target.Roles .ID) (gt .Position $tRolePos) }} {{ $tRolePos = .Position }}{{ end }}
+{{ end }}
+{{ if gt $uRolePos $tRolePos }} {{/* If the target has a lower rank, the command proceeds */}}
+    {{ if $args.IsSet 0 }} {{/* If the argument was a valid member, proceed */}}
+        {{ if (dbGet $user.ID "appealBan") }} {{/* If the user is already banned from appeals */}}
+            {{ print $user.Mention " is already banned from appeals. Use the `;appealunban` command to remove their ban." }}
+        {{ else }} {{/* If the user is not banned from appeals */}}
+            {{ dbSet $user.ID "appealBan" 1 }} {{/* Assigns a value 1 so that their role will persist if they leave and rejoin (the command where this happens is located in the general feed) */}}
+            {{ giveRoleID $user.ID $roleID }}
+            {{ print $user.Mention " has successfully been banned from appeals! Use the `;appealunban` command to remove their ban." }}
+            {{ $embed := cembed
+                "title" "Appeal Ban Added"
+                "description" (printf ">>> **Banned Member:** <@%d> *ID (%d)* \n **Reasponsible Moderator:** <@%d> \n**Reason:** %s" $user.ID $user.ID .User.ID (or $reason "(No reason specified)") )
+                "color" 14040124
+                "footer" (sdict
+                    "text" (print .User.Username " (ID " .User.ID ")" )
+                    "icon_url" (.User.AvatarURL "Moderator") )
+                "timestamp" currentTime
+            }}
+            {{ sendMessage $logChannel $embed }} {{/* Sends a log of the ban to the channel given */}}
+        {{ end }}
+    {{ end }}
+{{ else }} {{/* If the rank of the user was not high enough */}}
+	{{ print "`" $user.Username "` is a too high of a rank to be banned from appeals. You can only ban people from appeals that are a lower rank than you" }}
+{{ end }}
