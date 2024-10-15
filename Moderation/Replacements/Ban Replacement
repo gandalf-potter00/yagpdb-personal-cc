@@ -32,7 +32,7 @@
         {{ dbSet $userID "modStats" $x.Value }} {{/* Saves the new value to the database */}}
 	{{ end }}
 {{ else }} {{/* If ban */}}
-	{{ if ge (len .CmdArgs) 3 }}
+	{{ if ge (len .CmdArgs) 2 }}
 		{{ $args := .CmdArgs }}
 		{{ $user := index $args 0 }}
 		{{ $reason := joinStr " " (slice $args 1) }}
